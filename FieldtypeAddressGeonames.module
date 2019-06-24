@@ -1,0 +1,298 @@
+<?php
+
+/**
+ * ProcessWire Geonames Address Fieldtype
+ *
+ * Holds an address
+ *
+ * For documentation about the fields used in this class, please see:
+ * /wire/core/Fieldtype.php
+ *
+ * ProcessWire 2.x
+ * Copyright (C) 2016 by gebeer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://www.processwire.com
+ *
+ *
+ */
+
+class FieldtypeAddressGeonames extends Fieldtype implements Module, ConfigurableModule {
+
+    public static function getModuleInfo() {
+        return array(
+            'title' => 'Geonames Address',
+            'version' => 001,
+            'summary' => 'Field that stores an address with normalised values from geonames.org service.',
+            'installs' => 'InputfieldAddressGeonames',
+            'icon' => 'map-marker',
+        );
+    }
+
+    /**
+     * Data as used by the get/set functions
+     *
+     */
+    protected $data = array();
+
+
+   /**
+     * Default configuration for module
+     *
+     */
+    static public function getDefaultData() {
+            return array(
+                "googleApiKey" => ''
+            );
+    }
+
+    /**
+     * Include our GeoAddress class, which serves as the value for fields of type FieldtypeAddressGeonames
+     *
+     */
+    public function __construct() {
+       foreach(self::getDefaultData() as $key => $value) {
+               $this->$key = $value;
+       }
+        require_once(dirname(__FILE__) . '/GeoAddress.php');
+    }
+
+    /**
+     * Return the Inputfield required by this Fieldtype
+     *
+     */
+    public function getInputfield(Page $page, Field $field) {
+        $inputfield = $this->modules->get('InputfieldAddressGeonames');
+        $inputfield->class = $this->className();
+        $inputfield->set('editPage', $page);
+        return $inputfield;
+    }
+
+    /**
+     * Return all compatible Fieldtypes
+     *
+     */
+    public function ___getCompatibleFieldtypes(Field $field) {
+        // there are no other fieldtypes compatible with this one
+        return null;
+    }
+
+    /**
+     * Sanitize value for runtime
+     *
+     */
+    public function sanitizeValue(Page $page, Field $field, $value) {
+
+        // if given a blank value, return a valid blank value
+        if(empty($value)) return $this->getBlankValue($page, $field, $value); 
+
+        // if it's not a GeoAddress, then just return a blank GeoAddress
+        if(!$value instanceof GeoAddress) $value = $this->getBlankValue($page, $field);
+
+        // if the address changed, tell the $page that this field changed 
+        if($value->isChanged('country') 
+            || $value->isChanged('continent') 
+            || $value->isChanged('state') 
+            || $value->isChanged('countrycode') 
+            || $value->isChanged('city') 
+            || $value->isChanged('postcode')
+            || $value->isChanged('address1')
+            || $value->isChanged('address2') 
+            || $value->isChanged('lat') 
+            || $value->isChanged('lng')) $page->trackChange($field->name);
+
+        return $value;
+    }
+
+    /**
+     * Get a blank value used by this fieldtype
+     *
+     */
+    public function getBlankValue(Page $page, Field $field) {
+        // $geoaddress = new GeoAddress($page);
+        // $geoaddress->setTrackChanges(true); 
+        // return $geoaddress; 
+        return new GeoAddress();
+    }
+
+    /**
+     * Given a raw value (value as stored in DB), return the value as it would appear in a Page object
+     *
+     * @param Page $page
+     * @param Field $field
+     * @param string|int|array $value
+     * @return string|int|array|object $value
+     *
+     */
+    public function ___wakeupValue(Page $page, Field $field, $value) {
+
+        // if for some reason we already get a valid value, then just return it
+        if($value instanceof GeoAddress) return $value; 
+
+        // get a blank geoAddress instance
+        $geoAddress = $this->getBlankValue($page, $field);
+
+        // if we were given a blank value, then we've got nothing to do: just return a blank GeoAddress
+        if(empty($value) || !is_array($value)) return $geoAddress; 
+
+        // populate the GeoAdress object
+        $geoAddress->country = $value['country'];
+        $geoAddress->continent = $value['continent'];
+        $geoAddress->state = $value['state'];
+        $geoAddress->countrycode = $value['countrycode'];
+        $geoAddress->city = $value['city'];
+        $geoAddress->postcode = $value['postcode'];
+        $geoAddress->address1 = $value['address1'];
+        $geoAddress->address2 = $value['address2'];
+        $geoAddress->lat = $value['lat'];
+        $geoAddress->lng = $value['lng'];
+        $geoAddress->setTrackChanges(true);
+
+        return $geoAddress;
+    }
+
+    /**
+     * Given an 'awake' value, as set by wakeupValue, convert the value back to a basic type for storage in DB.
+     *
+     * @param Page $page
+     * @param Field $field
+     * @param string|int|array|object $value
+     * @return string|int
+     *
+     */
+    public function ___sleepValue(Page $page, Field $field, $value) {
+
+        $geoAddress = $value;
+
+        if(!$geoAddress instanceof GeoAddress)
+            throw new WireException("Expecting an instance of GeoAddress");
+
+        $sleepValue = array(
+            'country' => $geoAddress->country,
+            'continent' => $geoAddress->continent,
+            'state' => $geoAddress->state,
+            'countrycode' => $geoAddress->countrycode,
+            'city' => $geoAddress->city,
+            'postcode' => $geoAddress->postcode,
+            'address1' => $geoAddress->address1,
+            'address2' => $geoAddress->address2,
+            'lat' => $geoAddress->lat,
+            'lng' => $geoAddress->lng
+        );
+
+        return $sleepValue;
+    }
+
+
+    /**
+     * Return the database schema in specified format
+     *
+     */
+    public function getDatabaseSchema(Field $field) {
+        // bd($field);
+        // get the default schema
+        $schema = parent::getDatabaseSchema($field);
+
+        $schema['data'] = "VARCHAR(255) NOT NULL DEFAULT ''";   // country (reusing the 'data' field from default schema)
+        $schema['country'] = "VARCHAR(255) NOT NULL DEFAULT ''";   // country (reusing the 'data' field from default schema)
+        $schema['continent'] = "VARCHAR(20) NOT NULL DEFAULT ''";   // countrycode
+        $schema['state'] = "VARCHAR(20) NOT NULL DEFAULT ''";   // countrycode
+        $schema['countrycode'] = "VARCHAR(10) NOT NULL DEFAULT ''";   // countrycode
+        $schema['city'] = "VARCHAR(255) NOT NULL DEFAULT ''";   // city
+        $schema['postcode'] = "VARCHAR(20) NOT NULL DEFAULT ''";	// postcode
+        $schema['address1'] = "VARCHAR(255) NOT NULL DEFAULT ''";	// address1
+        $schema['address2'] = "VARCHAR(255) NOT NULL DEFAULT ''";   // address2
+        $schema['lat'] = "FLOAT(10,6) NOT NULL DEFAULT 0";   // lat
+        $schema['lng'] = "FLOAT(10,6) NOT NULL DEFAULT 0";   // lng
+
+        $schema['keys']['data'] = 'FULLTEXT KEY `data` (`data`)';
+
+        if($field->id) $this->updateDatabaseSchema($field, $schema);
+
+        return $schema;
+    }
+
+    /**
+     * Update the DB schema, if necessary
+     *
+     */
+    protected function updateDatabaseSchema(Field $field, array $schema) {
+
+        $requiredVersion = 1;
+        $schemaVersion = (int) $field->schemaVersion;
+
+        if($schemaVersion >= $requiredVersion) {
+            // already up-to-date
+            return;
+        }
+
+        if($schemaVersion == 0) {
+        bd($field->table);
+            // update schema to v1: add 'country' column
+            $schemaVersion = 1;
+            $result = $this->db->query("SHOW TABLES LIKE '$field->table'");
+            $row = $result->fetch_row();
+            if(!empty($row)) {
+                $result = $this->db->query("SHOW COLUMNS FROM `$field->table` WHERE field='country'");
+                if(!$result->num_rows) try {
+                    $result = $this->db->query("ALTER TABLE `$field->table` ADD country $schema[country] AFTER data");
+                    $this->message("Added 'country' column to '$field->table'");
+                    $result = $this->db->query("UPDATE `$field->table` SET country = data WHERE data != ''");
+                    $this->message("Copied 'data' column to 'country'");
+                } catch(Exception $e) {
+                    $this->error($e->getMessage());
+                }
+            }
+        }
+
+        $field->set('schemaVersion', $schemaVersion);
+        $field->save();
+
+    }
+
+    /**
+     * Match values for PageFinder
+     *
+     */
+    public function getMatchQuery($query, $table, $subfield, $operator, $value) {
+
+        // if($subfield == 'country') $subfield = 'data';
+        // if(/*$subfield != 'data' || */wire('db')->isOperator($operator)) {
+            // if dealing with something other than address, or operator is native to SQL,
+            // then let Fieldtype::getMatchQuery handle it instead
+        return parent::getMatchQuery($query, $table, $subfield, $operator, $value);
+        // }
+        // if we get here, then we're performing either %= (LIKE and variations) or *= (FULLTEXT and variations)
+        $ft = new DatabaseQuerySelectFulltext($query);
+        $ft->match($table, $subfield, $operator, $value);
+        return $query;
+    }
+
+    /**
+     * Perform installation: check that this fieldtype can be used with querying geonames.org and warn them if not.
+     *
+     */
+    public function ___install() {
+        if(!ini_get('allow_url_fopen')) {
+            $this->error("Querying the geonames.org database  will not work because 'allow_url_fopen' is denied in your PHP settings.");
+        }
+    }
+
+    public static function getModuleConfigInputfields(array $data) {
+
+        $data = array_merge(self::getDefaultData(), $data);
+
+        $wrapper = new InputfieldWrapper();
+
+        // $inputfields = parent::___getConfigInputfields();
+
+        $field = wire('modules')->get('InputfieldText');
+        $field->attr('name', 'googleApiKey');
+        $field->label = __('Google Maps API Key');
+        $field->description = __('API key is required for geocoding. You can get it [here](https://developers.google.com/maps/documentation/geocoding/get-api-key)');
+        $field->attr('value', $data['googleApiKey']);
+        $wrapper->add($field);
+
+        return $wrapper;
+    }
+}

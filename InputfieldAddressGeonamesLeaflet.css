@@ -1,0 +1,9 @@
+.InputfieldLeafletMapMarkerAddress,
+.InputfieldLeafletMapMarkerLat,
+.InputfieldLeafletMapMarkerLng,
+.InputfieldLeafletMapMarkerZoom {
+	display: none !important;
+}
+.InputfieldAddressGeonamesGeoButton {
+	text-align: right;
+}

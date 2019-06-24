@@ -1,0 +1,33 @@
+.InputfieldAddressGeonames .Inputfield {
+	margin-bottom: 1em;
+}
+.InputfieldAddressGeonamesCountry select,
+.InputfieldAddressGeonamesPostcode input {
+	width: 200px;
+} 
+.InputfieldAddressGeonamesCity input {
+	width: 400px;
+} 
+
+input[readonly="readonly"], input[readonly] {
+ color: grey !important;
+}
+.InputfieldAddressGeonames .notes {
+	clear: both;
+}
+.InputfieldAddressGeonames .Inputfield.muted {
+	opacity: .5;
+}
+.InputfieldAddressGeonames .Inputfield.hidden {
+	/*display: none;*/
+	/*max-height: 0;
+	overflow: hidden;*/
+}
+.InputfieldAddressGeonames .Inputfield label {
+	font-size: .8em;
+}
+
+@media only screen and (min-width: 768px) {
+
+
+}

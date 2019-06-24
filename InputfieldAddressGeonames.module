@@ -1,0 +1,406 @@
+<?php
+
+/**
+ * ProcessWire Geonames Address Inputfield
+ *
+ *
+ * Provides the admin control panel inputs for FieldtypeAddressGeonames
+ *
+ * For documentation about the fields used in this class, please see:
+ * /wire/core/Fieldtype.php
+ *
+ * ProcessWire 2.x
+ * Copyright (C) 2015 by gebeer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://processwire.com
+ *
+ */
+
+class InputfieldAddressGeonames extends Inputfield {
+
+    public static function getModuleInfo() {
+        return array(
+            'title' => 'Geonames Address',
+            'version' => 001,
+            'summary' => "Provides a set of inputs for addresses that get filled by query data from geonames.org",
+            'requires' => 'FieldtypeAddressGeonames',
+            'icon' => 'map-marker',
+        );
+    }
+
+    protected $assetPath;
+    protected $googleApiKey;
+
+    /**
+     * Just in case this Inputfield is being used separately from FieldtypeAddressGeonames, we include the GeoAddress class
+     *
+     */
+    public function __construct() {
+        require_once(dirname(__FILE__) . '/GeoAddress.php');
+        $this->set('editCity', 0);
+        $this->set('useLeaflet', 0);
+        parent::__construct();
+    }
+
+    /**
+     * Initialize the InputfieldAddressGeonames Inputfield
+     *
+     * We require the jeoquery.js jQuery plugin, so we add it to the scripts that will be loaded in PW admin
+     *
+     */
+    public function init() {
+        $class = $this->className();
+        $this->assetPath = $this->config->urls->$class;
+        $this->googleApiKey = $this->modules->getModule('FieldtypeAddressGeonames')->googleApiKey;
+        $this->config->scripts->add($this->assetPath . 'assets/jeoquery/jeoquery.js');
+        // $this->allowTextFormatters(false);
+        return parent::init();
+    }
+
+
+    public function interactLeaflet() {
+    }
+    /**
+     * Set an attribute to this Inputfield
+     *
+     * In this case, we just capture the 'value' attribute and make sure it's something valid
+     *
+     */
+    public function setAttribute($key, $value) {
+
+        if($key == 'value' && !$value instanceof GeoAddress && !is_null($value)) {
+            throw new WireException("This input only accepts a GeoAddress for it's value");
+        }
+
+        return parent::setAttribute($key, $value);
+    }
+
+    public function isEmpty() {
+        return (!$this->value);
+    }
+
+    /**
+     * Render the markup needed to draw the Inputfield
+     *
+     */
+    public function ___render() {
+        // var_dump($this->useLeaflet);
+        if($this->useLeaflet) $this->config->scripts->add($this->assetPath . 'InputfieldAddressGeonamesLeaflet.js');
+        if($this->useLeaflet) $this->config->styles->add($this->assetPath . 'InputfieldAddressGeonamesLeaflet.css');
+
+        $name = $this->attr('name');
+        $id = $this->attr('id');
+        $geoAddress = $this->attr('value');
+        $address1 = htmlentities($geoAddress->address1, ENT_QUOTES, "UTF-8");
+        $address2 = htmlentities($geoAddress->address2, ENT_QUOTES, "UTF-8");
+ 
+        $labels = array(
+            'continent' => $this->_('Continent'),
+            'state' => $this->_('State'),
+            'country' => $this->_('Country'),
+            'city' => $this->_('City'),
+            'postcode' => $this->_('Postcode'),
+            'address1' => $this->_('Address 1'),
+            'address2' => $this->_('Address 2'),
+            'lat' => $this->_('Latitude'),
+            'lng' => $this->_('Longitude')
+        );
+
+        $selectOption = ($geoAddress->country) ? "<option value='{$geoAddress->country}' selected>{$geoAddress->country}</option>" : '';
+        $disabled =($geoAddress->country) ? '' : 'disabled="disabled"';
+        $dataCountryCode = ($geoAddress->countrycode) ? " data-countrycode={$geoAddress->countrycode}" : '';
+        $editCity = $this->editCity;
+        $descCountry = $this->_("1. Choose a country from the list");
+        $descContinent = $this->_("will be filled automatically");
+        $descPostcode = $this->_("2. Enter a valid postcode");
+        $descCity = $this->_("will be filled automatically");
+        $descState = $this->_("will be filled automatically");
+        if(!$editCity) $descCity .= ' <em>' . $this->_("You cannot edit the city name.") . '</em>';
+
+        $initGeocoding = null;
+        if($this->useLeaflet) {
+            // get name of Leaflet Marker field on this page
+            $leafletField = $this->getLeafletField();
+            if ($leafletField) {
+                $leafletFieldName = $leafletField->name;
+            } else {
+                $this->error($this->_("There is no Leaflet Marker field on this page. Please add one"));
+                return $this;
+            }
+            $initGeocoding = "InputfieldAddressGeonamesLeaflet.init({leafletname: '{$leafletFieldName}'});";
+        }
+
+        $out = <<< _OUT
+
+            <span></span>
+            <div class='grid'>
+                <div class='grid-item one-half'>
+                    <div class='Inputfield InputfieldAddressGeonamesCountry'>
+                    <label>
+                    <strong>$labels[country]</strong>
+                    </label>
+                    <p class='description'>{$descCountry}</p>
+                    <select id='{$id}_country' name='{$name}_country' value='{$geoAddress->country}'{$dataCountryCode} {$disabled} />{$selectOption}</select>
+                    
+                    <input type='hidden' id='{$id}_countrycode' name='{$name}_countrycode' value='{$geoAddress->countrycode}' />
+                    </div>
+                </div>
+
+                <div class='grid-item one-half'>
+                    <div class='Inputfield hidden InputfieldAddressGeonamesCountry'>
+                    <label>
+                    <strong>$labels[continent]</strong>
+                    </label>
+                    <p class='description'>{$descContinent}</p>
+                    <input type='text' id='{$id}_continent' name='{$name}_continent' value='{$geoAddress->continent}' />
+                    </div>
+                </div>
+            </div>
+
+            <div class='grid'>
+                <div class='grid-item one-half'>
+                    <div class='Inputfield InputfieldAddressGeonamesPostcode'>
+                    <label>
+                    <strong>$labels[postcode]</strong><br />
+                    </label>
+                    <p class='description'>{$descPostcode}</p>
+                    <input type='text' id='{$id}_postcode' name='{$name}_postcode' value='{$geoAddress->postcode}' size='20' />
+                    </div>
+                </div>
+                <div class='grid-item one-half'>
+                    <div class='Inputfield InputfieldAddressGeonamesCity'>
+                    <label>
+                    <strong>$labels[city]</strong><br />
+                    </label>
+                    <p class='description'>{$descCity}</p>
+                    <input type='text' id='{$id}_city' name='{$name}_city' value='{$geoAddress->city}' size='50' />
+                    </div>
+                </div>
+            </div>
+            <div class='grid'>
+                <div class='grid-item one-half'>
+                &nbsp;
+                </div>
+                <div class='grid-item one-half'>
+                    <div class='Inputfield hidden InputfieldAddressGeonamesCountry'>
+                    <label>
+                    <strong>$labels[state]</strong>
+                    </label>
+                    <p class='description'>{$descState}</p>
+                    <input type='text' id='{$id}_state' name='{$name}_state' value='{$geoAddress->state}' />
+                    </div>
+                </div>
+            </div>
+
+            <div class='Inputfield InputfieldAddressGeonamesAddress1'>
+            <label>
+            <strong>$labels[address1]</strong><br />
+            <input type='text' id='{$id}_address1' name='{$name}_address1' value='{$geoAddress->address1}' size='80' />
+            </label>
+            </div>
+
+            <div class='Inputfield InputfieldAddressGeonamesAddress2'>
+            <label>
+            <strong>$labels[address2]</strong><br />
+            <input type='text' id='{$id}_address2' name='{$name}_address2' value='{$geoAddress->address2}' size='80' />
+            </label>
+            </div>
+
+            <p class='Inputfield InputfieldAddressGeonamesLat'>
+            <input type='hidden' id='{$id}_lat' name='{$name}_lat' value='{$geoAddress->lat}' />
+            </p>
+
+            <p class='Inputfield InputfieldAddressGeonamesLng'>
+            <input type='hidden' id='{$id}_lng' name='{$name}_lng' value='{$geoAddress->lng}' />
+            </p>
+
+            <script>
+            $(document).ready(function() {
+                InputfieldAddressGeonames.init({editCity: {$editCity}});
+                {$initGeocoding}
+            });
+            </script>
+_OUT;
+
+        return $out;
+    }
+
+    /**
+     * Process the input after a form submission
+     *
+     */
+    public function ___processInput(WireInputData $input) {
+        $name = $this->attr('name');
+        $geoAddress = $this->attr('value');
+        $address = array(
+                'country' => $name . "_country",
+                'continent' => $name . "_continent",
+                'state' => $name . "_state",
+                'countrycode' => $name . "_countrycode",
+                'city' => $name . "_city",
+                'postcode' => $name . "_postcode",
+                'address1' => $name . "_address1",
+                'address2' => $name . "_address2",
+                'lat' => $name . "_lat",
+                'lng' => $name . "_lng"
+            );
+
+        // loop all inputs and set them if changed
+        foreach($address as $key => $name) {
+            if(isset($input->$name)) {
+                if($geoAddress->$key != $input->$name) {
+                    $geoAddress->set($key, $input->$name);
+                    if($key != 'lat' && $key != 'lng') $this->trackChange('value');
+                }
+            }
+        }
+        // bardump($this->user);
+        if($this->useLeaflet && ($this->isChanged()/* || (float) $this->geoAddress->lat === 0.0*/ )) {
+            $leafletInput = $this->getLeafletField()->getInputfield($this->editPage);
+            $location = $this->geoCode();
+            $lat = (array_key_exists('lat', $location)) ? $this->sanitizer->float($location['lat'], ['precision' => 8]) : null;
+            $lng = (array_key_exists('lng', $location)) ? $this->sanitizer->float($location['lng'], ['precision' => 8]): null;
+            if($lat) $geoAddress->set('lat', $lat);
+            if($lng) $geoAddress->set('lng', $lng);
+            
+            // save lat/lng to Leafletfield
+            $leafletFieldName = $this->getLeafletField()->name;
+            $this->editPage->of(false);
+            $this->editPage->$leafletFieldName->lat = $lat;
+            $this->editPage->$leafletFieldName->lng = $lng;
+            $this->editPage->save();
+
+            $this->message("Address was geocoded to lat:{$geoAddress->lat}, lng:{$geoAddress->lng}");
+            // $leafletInput->set('description', "Address was geocoded to lat:{$geoAddress->lat}, lng:{$geoAddress->lng}");
+            
+            if(array_key_exists('warning', $location)) {
+                // $this->error($location['warning']);
+                $leafletInput->error($location['warning']);
+            }
+        }
+        
+        return $this;
+    }
+
+    /**
+    * get the field on this page that is a FieldtypeLeafletMapMarker 
+    *
+    */
+    public function getLeafletField() {
+        foreach ($this->editPage->template->fieldgroup as $field) {
+            if($field->type instanceof FieldtypeLeafletMapMarker ) {
+                return $field;
+            }
+        }
+        return false;
+    }
+
+    /**
+    * Geocode given address with Google Maps geocode API / http://nominatim.openstreetmap.org/search
+    *
+    */
+    public function geoCode( $address = '') {
+        // $target = 'http://nominatim.openstreetmap.org/search';
+        // $params = '&format=json&addressdetails=1';
+        // $query = '?q=';
+        $target = 'https://maps.googleapis.com/maps/api/geocode/json?address=';
+        $params = '';
+        $query = '';
+        $apiKey = "&key=" . $this->googleApiKey;
+        if(!$address) {
+                $geoAddress = $this->attr('value'); //exit(var_dump($this->editPage));
+                $address1 = ($geoAddress->address1) ? urlencode($geoAddress->address1) . ',' : '';
+                $address2 = ($geoAddress->address2) ? urlencode($geoAddress->address2) . ',' : '';
+                $city = ($geoAddress->city) ? urlencode($geoAddress->city) . ',' : '';
+                $country = ($geoAddress->country) ? urlencode($geoAddress->country) : '';
+                $address .= $address1 . $address2 . $city . $country;
+        }
+        $query .= $address;
+        $url = $target . $query . $params . $apiKey;
+// bardump($url);
+        $json = file_get_contents($url);
+        $json = json_decode($json, true);
+
+        $location = null;
+        $errorText = $this->_("We could not find your address on the map. Please drag the marker to the right position on the map yourself and click save again. If you don't enter a valid address students will not be able to find you.");
+
+        // error handling
+        // no result -> retry city + country only
+        if(isset($json['status']) && $json['status'] == 'ZERO_RESULTS') {
+            $query = $city . $country;
+            $url = $target . $query . $params . $apiKey;
+
+            $json = file_get_contents($url);
+            $json = json_decode($json, true);
+            if(empty($json['status']) || $json['status'] != 'OK') {
+                $location['warning'] = $errorText;
+            } else {
+                $location = $json['results'][0]['geometry']['location'];
+                $location['warning'] = $errorText;
+            }
+        } elseif(empty($json['status']) || $json['status'] != 'OK') {
+                $location['warning'] = $errorText;
+        } else {
+            $location = $json['results'][0]['geometry']['location'];
+        }
+
+        // save lat/lng
+        if($location) {
+            return $location;
+        }
+        return array();
+        // exit;
+    }
+
+    public function ___getConfigInputfields() {
+        $inputfields = parent::___getConfigInputfields();
+
+        $field = $this->modules->get('InputfieldText');
+        $field->attr('name', 'apikey');
+        $field->label = $this->_('Google Maps API Key');
+        $field->description = $this->_('API key is required. You can get it <a href="https://developers.google.com/maps/documentation/geocoding/get-api-key">here</a>');
+        $field->attr('value', $this->apikey);
+        $inputfields->add($field);
+
+        $field = $this->modules->get('InputfieldCheckbox');
+        $field->attr('name', 'editCity');
+        $field->label = $this->_('Enable editing of City field');
+        $field->description = $this->_('Manual editing of the city field is disabled by default. If you want to enable it, check this box');
+        $field->attr('value', $this->editCity ? $this->editCity : 0 );
+        $field->attr('checked', $this->editCity === 1 ? 'checked' : '' );
+        $field->columnWidth = 100;
+        $inputfields->add($field);
+
+        $field = $this->modules->get('InputfieldCheckbox');
+        $field->attr('name', 'useLeaflet');
+        $field->label = $this->_('Interact with InputfieldLeafletMapMarker for geocoding');
+        $field->description = $this->_('Use the address from this field for setting latitude and longitude in the InputfielLeafletMapMarker field');
+        $field->attr('value', $this->useLeaflet ? $this->useLeaflet : 0 );
+        $field->attr('checked', $this->useLeaflet === 1 ? 'checked' : '' );
+        $field->columnWidth = 100;
+        $inputfields->add($field);
+
+        $field = $this->modules->get('InputfieldMarkup');
+        $field->label = $this->_('API Notes');
+        $field->description = $this->_('You can access individual values from this field using the following from your template files:');
+        $field->value =
+            "<pre>" .
+            "\$page->{$this->name}->country\n" .
+            "\$page->{$this->name}->continent\n" .
+            "\$page->{$this->name}->state\n" .
+            "\$page->{$this->name}->countrycode\n" .
+            "\$page->{$this->name}->postcode\n" .
+            "\$page->{$this->name}->city\n" .
+            "\$page->{$this->name}->address1\n" .
+            "\$page->{$this->name}->address2\n" .
+            "\$page->{$this->name}->lat (will be 0 if you don't interact with a map field)\n" .
+            "\$page->{$this->name}->lng (will be 0 if you don't interact with a map field)\n" .
+            "</pre>";
+
+        $inputfields->add($field);
+
+        return $inputfields;
+    }
+
+}

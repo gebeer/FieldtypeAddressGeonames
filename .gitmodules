@@ -1,0 +1,3 @@
+[submodule "assets/jeoquery"]
+	path = assets/jeoquery
+	url = https://github.com/tompi/jeoquery
