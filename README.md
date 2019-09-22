@@ -1,5 +1,6 @@
 # FieldtypeAddressGeonames Module for ProcessWire
 ## **This module is in an early stage of development. Use at your own risk**
+### I use this on a production site since 2017 but with modified JS.
 
 This Fieldtype for ProcessWire holds an address consisting of country, countrycode, postcode and city, latitude and longitude.
 Country, postcode and city data are pulled from http://www.geonames.org using a slightly modified version of [jeoQuery](http://tompi.github.io/jeoquery/).
